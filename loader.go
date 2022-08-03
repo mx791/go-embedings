@@ -179,6 +179,7 @@ func train_embedings(liste [][]int) [][]float64 {
 	return embeding_matrix
 }
 
+// normalize un vecteur pour que sa norme soit 1
 func normalize_vect(vect []float64) {
 	norm := 0.0
 	for i:=0; i<len(vect); i++ {
