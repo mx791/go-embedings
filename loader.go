@@ -1,19 +1,26 @@
-package main;
-
+package main
 
 import (
 	"fmt"
 	"math/rand"
+	"os"
+	"encoding/json"
+	"io/ioutil"
+	"strings"
+	"strconv"
 )
 
 var old_to_new_indexes = make(map[int]int)
 var new_to_old_indexes = make(map[int]int)
 var freqs = make(map[int]int)
 
-var ITERS = 20
-var LEARN_RATE = 0.01
-var EMBEDING_SIZE = 4
+var ITERS = 30
+var LEARN_RATE = 0.003
+var EMBEDING_SIZE = 12
 var BATCH_SIZE = 5
+var MAX_ID = 30000
+var FILE_PATH = "./playlists_.json"
+var OUTPUT_PATH = "./embedings.json"
 
 func build_normalized_list(liste [][]int) [][]int {
 	new_liste := make([][]int, len(liste))
@@ -25,13 +32,14 @@ func build_normalized_list(liste [][]int) [][]int {
 			if !ok {
 				old_to_new_indexes[list_value] = counter
 				new_to_old_indexes[counter] = list_value
-				freqs[counter] = 1
+				freqs[list_value] = 1
 				counter += 1
 			} else {
-				freqs[list_value] += 1
+				freqs[list_value] = freqs[list_value] + 1
 			}
 		}
 	}
+	fmt.Println(len(old_to_new_indexes), len(new_to_old_indexes))
 	return new_liste
 }
 
@@ -66,7 +74,7 @@ func sim(vect_a []float64, vect_b []float64, product bool) float64 {
 		if product {
 			sim += Abs(vect_a[i] * vect_b[i])
 		} else {
-			sim += Abs(vect_a[i] - vect_b[i])
+			sim += (vect_a[i] - vect_b[i]) * (vect_a[i] - vect_b[i])
 		}
 		norm_a += Abs(vect_a[i])
 		norm_b += Abs(vect_b[i])
@@ -95,7 +103,7 @@ func euclidian_dst(vect_a []float64, vect_b []float64) float64 {
 // selectionne un id aléatoire depuis la même liste qu'un autre id
 func select_true_item(liste []int, item_id int) int {
 	selected_id := liste[rand.Intn(len(liste))]
-	for selected_id == item_id {
+	for selected_id == item_id || selected_id >= MAX_ID {
 		selected_id = liste[rand.Intn(len(liste))]
 	}
 	return selected_id
@@ -105,6 +113,10 @@ func select_true_item(liste []int, item_id int) int {
 func gen_id(listes [][]int) int {
 	vect_id := rand.Intn(len(listes))
 	new_item_id := listes[vect_id][rand.Intn(len(listes[vect_id]))]
+	for new_item_id >= MAX_ID {
+		vect_id = rand.Intn(len(listes))
+		new_item_id = listes[vect_id][rand.Intn(len(listes[vect_id]))]
+	}
 	return new_item_id
 }
 
@@ -129,11 +141,12 @@ func select_false_item(listes [][]int, list_id int, item_id int) int {
 
 // met à jour un embeding pour l'eloigner des items différents et le rapprocher des similaires
 func update_embeding(anchor []float64, similar []float64, different []float64) {
-	for value_id:=0; value_id<EMBEDING_SIZE; value_id++ {
+	for value_id:=0; value_id < EMBEDING_SIZE; value_id++ {
+
 		if anchor[value_id] > similar[value_id] {
-			anchor[value_id] -= LEARN_RATE
+			similar[value_id] += LEARN_RATE
 		} else {
-			anchor[value_id] += LEARN_RATE
+			similar[value_id] -= LEARN_RATE
 		}
 
 		if anchor[value_id] > different[value_id] {
@@ -144,8 +157,9 @@ func update_embeding(anchor []float64, similar []float64, different []float64) {
 	}
 }
 
+// serieusement besoin d'expliquer ?
 func train_embedings(liste [][]int) [][]float64 {
-	embeding_matrix := init_embedings(len(new_to_old_indexes), EMBEDING_SIZE)
+	embeding_matrix := init_embedings(MAX_ID, EMBEDING_SIZE)
 	for iter := 0; iter < ITERS; iter++ {
 
 		inside_dst := 0.0
@@ -157,10 +171,12 @@ func train_embedings(liste [][]int) [][]float64 {
 
 			for item_id:=0; item_id < len(liste[list_id]); item_id++ {
 
-				similar_item_id := select_true_item(liste[list_id], item_id)
-				different_item_id := select_false_item(liste, list_id, item_id)
+				anchor_id := liste[list_id][item_id]
+
+				similar_item_id := select_true_item(liste[list_id], anchor_id)
+				different_item_id := select_false_item(liste, list_id, anchor_id)
 	
-				base_vector := embeding_matrix[item_id]
+				base_vector := embeding_matrix[anchor_id]
 				similar_vector := embeding_matrix[similar_item_id]
 				different_vector := embeding_matrix[different_item_id]
 	
@@ -174,7 +190,11 @@ func train_embedings(liste [][]int) [][]float64 {
 			}
 		}
 
-		fmt.Println((iter, "/", ITERS, ", cosin_sim=", (outside_sim/inside_sim), ", euclidian_dst=", (inside_dst/outside_dst))
+		for embeding_id := 0; embeding_id < len(embeding_matrix); embeding_id++ {
+			normalize_vect(embeding_matrix[embeding_id])
+		}
+
+		fmt.Println("iter", iter+1, "/", ITERS, "cosin_sim=", (outside_sim/inside_sim), "euclidian_dst=", (inside_dst/outside_dst))
 	}
 	return embeding_matrix
 }
@@ -213,8 +233,92 @@ func create_random_adjacency_list(size int, max_index int, max_vect_size int, mi
 	return return_list
 }
 
+func load_liste_file(path string) [][]int {
+	jsonFile, err := os.Open(path)
+	defer jsonFile.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+	var datas [][]int 
+	json.Unmarshal(byteValue, &datas)
+	return datas
+}
+
+func find_closest(vector []float64, n int, matrix [][]float64) {
+	cc := 0
+	stepp := 0.0002
+	for seuil := 0.0; seuil < 1.0; seuil+= stepp {
+		for item := 0; item < MAX_ID; item ++ {
+			dst := euclidian_dst(vector, matrix[item])
+			if dst > seuil && dst < seuil + stepp {
+				fmt.Println(dst, item)
+				cc += 1
+			}
+			if cc > n {
+				return
+			}
+		}
+	} 
+}
+
+func clear_liste(liste [][]int) [][]int {
+	filtered_liste := make([][]int, 0)
+	for i := 0; i < len(liste); i++ {
+		vect := make([]int, 0)
+		used_indexes := make(map[int]int)
+		for e := 0; e < len(liste[i]); e++ {
+			value := liste[i][e]
+			_, ok := used_indexes[value]
+			if value < MAX_ID && !ok {
+				vect = append(vect, value)
+				used_indexes[value] = 1
+			}
+		}
+		if len(vect) > 3 {
+			filtered_liste = append(filtered_liste, vect)
+		}
+	}
+	return filtered_liste
+}
+
+func parse_param() {
+	argsWithProg := os.Args
+	for i := 1; i < len(argsWithProg); i++ {
+		arg_array := strings.Split(argsWithProg[i], "=")
+		if len(arg_array) == 1 {
+			continue
+		}
+		value, err := strconv.Atoi(arg_array[1])
+		if err != nil {
+			if arg_array[0] == "FILE_PATH" {
+				fmt.Println("seting FILE_PATH to", arg_array[1])
+				FILE_PATH = arg_array[1]
+			}
+			continue
+		}
+		if arg_array[0] == "ITERS" {
+			ITERS = value
+			fmt.Println("seting ITERS to", arg_array[1])
+		} else if arg_array[0] == "EMBEDING_SIZE"{
+			EMBEDING_SIZE = value
+			fmt.Println("seting EMBEDING_SIZE to", arg_array[1])
+		} else if arg_array[0] == "MAX_ID"{
+			MAX_ID = value
+			fmt.Println("seting MAX_ID to", arg_array[1])
+		}
+	}
+}
+
 func main() {
-	test_list := create_random_adjacency_list(15000, 50, 10, 3)
-	build_normalized_list(test_list)
-	train_embedings(test_list)
+	
+	parse_param()
+
+	datas := load_liste_file(FILE_PATH)
+	fmt.Println(len(datas), "listes")
+	datas = clear_liste(datas)
+	fmt.Println(len(datas), "listes après filtrage")
+	// build_normalized_list(datas)
+	matrix := train_embedings(datas)
+	find_closest(matrix[944], 15, matrix)
 }
