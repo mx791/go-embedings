@@ -294,6 +294,9 @@ func parse_param() {
 			if arg_array[0] == "FILE_PATH" {
 				fmt.Println("seting FILE_PATH to", arg_array[1])
 				FILE_PATH = arg_array[1]
+			} else if arg_array[0] == "OUTPUT_PATH" {
+				fmt.Println("seting OUTPUT_PATH to", arg_array[1])
+				OUTPUT_PATH = arg_array[1]
 			}
 			continue
 		}
@@ -310,6 +313,11 @@ func parse_param() {
 	}
 }
 
+func save_datas(matrix [][]float64, target_path string) {
+	file, _ := json.MarshalIndent(matrix, "", " ")
+	_ = ioutil.WriteFile(target_path, file, 0644)
+}
+
 func main() {
 	
 	parse_param()
@@ -320,5 +328,5 @@ func main() {
 	fmt.Println(len(datas), "listes après filtrage")
 	// build_normalized_list(datas)
 	matrix := train_embedings(datas)
-	find_closest(matrix[944], 15, matrix)
+	save_datas(matrix, OUTPUT_PATH)
 }
