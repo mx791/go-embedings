@@ -1,6 +1,6 @@
 package main
 
-// normalize un vecteur pour que sa norme soit 1
+// vector normalisation
 func normalize_vect(vect []float64) {
 	norm := 0.0
 	for i := 0; i < len(vect); i++ {
@@ -14,7 +14,6 @@ func normalize_vect(vect []float64) {
 	}
 }
 
-// fonction valeur absolue
 func Abs(number float64) float64 {
 	if number > 0 {
 		return number
