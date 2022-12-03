@@ -15,7 +15,7 @@ var freqs = make(map[int]int)
 
 var ITERS = 50
 var LEARN_RATE = 0.1
-var LEARN_RATE_DECAY = 0.3
+var LEARN_RATE_DECAY = 0.99
 var EMBEDDING_SIZE = 32
 var MAX_ID = 3000000
 var FILE_PATH = "../output/playlists_.json"

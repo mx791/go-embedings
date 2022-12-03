@@ -61,11 +61,7 @@ func select_false_item(listes [][]int, list_id int, item_id int) int {
 func update_embedding(anchor []float64, similar []float64, different []float64) {
 	for value_id := 0; value_id < EMBEDDING_SIZE; value_id++ {
 
-		if anchor[value_id] > similar[value_id] {
-			similar[value_id] += LEARN_RATE
-		} else {
-			similar[value_id] -= LEARN_RATE
-		}
+		similar[value_id] += (anchor[value_id] - similar[value_id]) * LEARN_RATE
 
 		if anchor[value_id] > different[value_id] {
 			different[value_id] -= LEARN_RATE
@@ -115,9 +111,6 @@ func train_embeddings(liste [][]int) [][]float64 {
 
 		wg.Wait()
 
-		for embedding_id := 0; embedding_id < len(embedding_matrix); embedding_id++ {
-			normalize_vect(embedding_matrix[embedding_id])
-		}
 		LEARN_RATE = LEARN_RATE * LEARN_RATE_DECAY
 		fmt.Println("iter", iter+1, "/", ITERS, "cosin_sim=", (outside_sim / inside_sim), "euclidian_dst=", (inside_dst / outside_dst), "learning_rate=", LEARN_RATE)
 	}
